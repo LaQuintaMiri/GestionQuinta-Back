@@ -108,7 +108,6 @@ router.post('/', async (req, res) => {
           divisa_senia: divisa_senia || 'ARS',
           estado_pago: estado_pago || 'pendiente',
           estado_reserva: estado_reserva || 'pre-reserva',
-          notes: notas, // O notas
           notas,
         },
       ])
