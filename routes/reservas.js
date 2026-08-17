@@ -55,6 +55,8 @@ router.post('/', async (req, res) => {
     fecha_fin,
     monto_total,
     monto_senia,
+    divisa_total,
+    divisa_senia,
     estado_pago,
     estado_reserva,
     notas,
@@ -102,8 +104,11 @@ router.post('/', async (req, res) => {
           fecha_fin,
           monto_total: monto_total || 0,
           monto_senia: monto_senia || 0,
+          divisa_total: divisa_total || 'ARS',
+          divisa_senia: divisa_senia || 'ARS',
           estado_pago: estado_pago || 'pendiente',
           estado_reserva: estado_reserva || 'pre-reserva',
+          notes: notas, // O notas
           notas,
         },
       ])
@@ -119,6 +124,7 @@ router.post('/', async (req, res) => {
         {
           tipo: 'ingreso',
           monto: monto_senia,
+          divisa: divisa_senia || 'ARS',
           categoria: 'reserva_senia',
           fecha: fecha_inicio, // se registra con fecha de reserva
           reserva_id: reserva.id,
@@ -141,6 +147,8 @@ router.put('/:id', async (req, res) => {
     fecha_fin,
     monto_total,
     monto_senia,
+    divisa_total,
+    divisa_senia,
     estado_pago,
     estado_reserva,
     notas,
@@ -185,6 +193,8 @@ router.put('/:id', async (req, res) => {
         fecha_fin,
         monto_total,
         monto_senia,
+        divisa_total,
+        divisa_senia,
         estado_pago,
         estado_reserva,
         notas,
@@ -199,12 +209,20 @@ router.put('/:id', async (req, res) => {
     // 3. Registrar transacciones automáticas basadas en cambios de estado
     // Transacción por saldo: si pasa de 'pendiente' o 'senia_pagada' a 'total_pagado'
     if (estado_pago === 'total_pagado' && oldReserva.estado_pago !== 'total_pagado') {
-      const saldo = (monto_total || oldReserva.monto_total) - (monto_senia || oldReserva.monto_senia);
+      const currentDivisaTotal = divisa_total || oldReserva.divisa_total || 'ARS';
+      const currentDivisaSenia = divisa_senia || oldReserva.divisa_senia || 'ARS';
+      const sameDivisa = currentDivisaTotal === currentDivisaSenia;
+      
+      const valTotal = monto_total !== undefined ? monto_total : oldReserva.monto_total;
+      const valSenia = monto_senia !== undefined ? monto_senia : oldReserva.monto_senia;
+      
+      const saldo = sameDivisa ? (valTotal - valSenia) : valTotal;
       if (saldo > 0) {
         await supabase.from('transacciones').insert([
           {
             tipo: 'ingreso',
             monto: saldo,
+            divisa: currentDivisaTotal,
             categoria: 'reserva_saldo',
             fecha: new Date().toISOString().split('T')[0],
             reserva_id: id,

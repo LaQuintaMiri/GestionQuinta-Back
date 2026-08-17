@@ -22,39 +22,59 @@ router.get('/resumen', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('transacciones')
-      .select('tipo, monto, fecha, categoria');
+      .select('tipo, monto, fecha, categoria, divisa');
 
     if (error) throw error;
 
-    // Calcular balances totales e históricos mensuales
-    let totalIngresos = 0;
-    let totalEgresos = 0;
+    // Calcular balances totales e históricos mensuales separados por divisa
+    let ingresosARS = 0;
+    let egresosARS = 0;
+    let ingresosUSD = 0;
+    let egresosUSD = 0;
     const mensual = {};
 
     data.forEach((tx) => {
       const monto = parseFloat(tx.monto);
+      const divisa = tx.divisa || 'ARS';
       const fechaObj = new Date(tx.fecha);
       const mesKey = `${fechaObj.getFullYear()}-${String(fechaObj.getMonth() + 1).padStart(2, '0')}`;
 
       if (!mensual[mesKey]) {
-        mensual[mesKey] = { ingresos: 0, egresos: 0, balance: 0 };
+        mensual[mesKey] = { 
+          ingresosARS: 0, egresosARS: 0, balanceARS: 0,
+          ingresosUSD: 0, egresosUSD: 0, balanceUSD: 0
+        };
       }
 
-      if (tx.tipo === 'ingreso') {
-        totalIngresos += monto;
-        mensual[mesKey].ingresos += monto;
+      if (divisa === 'USD') {
+        if (tx.tipo === 'ingreso') {
+          ingresosUSD += monto;
+          mensual[mesKey].ingresosUSD += monto;
+        } else {
+          egresosUSD += monto;
+          mensual[mesKey].egresosUSD += monto;
+        }
+        mensual[mesKey].balanceUSD = mensual[mesKey].ingresosUSD - mensual[mesKey].egresosUSD;
       } else {
-        totalEgresos += monto;
-        mensual[mesKey].egresos += monto;
+        if (tx.tipo === 'ingreso') {
+          ingresosARS += monto;
+          mensual[mesKey].ingresosARS += monto;
+        } else {
+          egresosARS += monto;
+          mensual[mesKey].egresosARS += monto;
+        }
+        mensual[mesKey].balanceARS = mensual[mesKey].ingresosARS - mensual[mesKey].egresosARS;
       }
-      mensual[mesKey].balance = mensual[mesKey].ingresos - mensual[mesKey].egresos;
     });
 
     res.json({
       resumenGeneral: {
-        ingresos: totalIngresos,
-        egresos: totalEgresos,
-        balance: totalIngresos - totalEgresos,
+        ingresosARS,
+        egresosARS,
+        balanceARS: ingresosARS - egresosARS,
+        ingresosUSD,
+        egresosUSD,
+        balanceUSD: ingresosUSD - egresosUSD
       },
       resumenMensual: mensual,
     });
@@ -65,7 +85,7 @@ router.get('/resumen', async (req, res) => {
 
 // Crear transacción
 router.post('/', async (req, res) => {
-  const { tipo, monto, categoria, fecha, reserva_id, descripcion } = req.body;
+  const { tipo, monto, divisa, categoria, fecha, reserva_id, descripcion } = req.body;
 
   if (!tipo || !monto || !categoria) {
     return res.status(400).json({ error: 'Tipo, monto y categoría son obligatorios.' });
@@ -78,6 +98,7 @@ router.post('/', async (req, res) => {
         {
           tipo,
           monto,
+          divisa: divisa || 'ARS',
           categoria,
           fecha: fecha || new Date().toISOString().split('T')[0],
           reserva_id: reserva_id || null,
